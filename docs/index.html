@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bulk GSTIN Checker</title>
+<style>
+:root{--bg:#fafaf8;--fg:#1c1c1a;--mu:#6b6b66;--card:#fff;--bd:#dcdcd5;--ac:#0b6e4f;--ok:#0b6e4f;--bad:#b3261e;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161615;--fg:#ececE6;--mu:#9a9a92;--card:#1f1f1d;--bd:#33332f;--ac:#4cc79b;--ok:#4cc79b;--bad:#ff8a80}}
+:root[data-theme="dark"]{--bg:#161615;--fg:#ececE6;--mu:#9a9a92;--card:#1f1f1d;--bd:#33332f;--ac:#4cc79b;--ok:#4cc79b;--bad:#ff8a80}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:20px 16px}
+h1{font-size:22px;margin:0 0 4px}p{color:var(--mu);margin:4px 0}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:16px;margin:14px 0}
+button,.btn{background:var(--ac);color:var(--bg);border:0;border-radius:8px;padding:8px 14px;font:inherit;cursor:pointer;text-decoration:none;display:inline-block}
+button.s{background:transparent;color:var(--ac);border:1px solid var(--bd);padding:4px 8px;font-size:13px}
+input[type=file]{font:inherit;color:var(--fg)}
+.wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--bd);white-space:nowrap}
+th{color:var(--mu);font-weight:600}.ok{color:var(--ok)}.bad{color:var(--bad)}
+select{font:inherit;background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:6px;padding:3px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+</style></head><body><main>
+<h1>Bulk GSTIN Checker</h1>
+<p>Upload an Excel/CSV with GSTINs in the first column. Everything runs in your browser; nothing is uploaded anywhere.</p>
+<div class="card"><b>Need to download returns (GSTR-1, 3B, 2B) for many accounts?</b>
+<p>That needs a real browser on your computer, so it can't run inside a web page. Download the toolkit, unzip, double-click <code>Start-Windows.bat</code> (or <code>Start-Mac-Linux.command</code>). It installs everything itself on first run.</p>
+<a class="btn" href="https://github.com/yashgoel2006-coder/GST-Portal-Downloader/archive/refs/heads/main.zip">Download toolkit (.zip)</a></div>
+<div class="card row">
+<input type="file" id="f" accept=".xlsx,.xls,.csv">
+<button id="dl" style="display:none">Download Excel</button>
+</div>
+<div id="sum" class="card" style="display:none"></div>
+<div class="card wrap" id="out" style="display:none"></div>
+<p>Format and checksum validation is instant and free. Live status (Active/Cancelled) needs the portal’s captcha, so use “Open portal”, then record the result in the Status column.</p>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const ST={"01":"Jammu & Kashmir","02":"Himachal Pradesh","03":"Punjab","04":"Chandigarh","05":"Uttarakhand","06":"Haryana","07":"Delhi","08":"Rajasthan","09":"Uttar Pradesh","10":"Bihar","11":"Sikkim","12":"Arunachal Pradesh","13":"Nagaland","14":"Manipur","15":"Mizoram","16":"Tripura","17":"Meghalaya","18":"Assam","19":"West Bengal","20":"Jharkhand","21":"Odisha","22":"Chhattisgarh","23":"Madhya Pradesh","24":"Gujarat","26":"Dadra & Nagar Haveli and Daman & Diu","27":"Maharashtra","29":"Karnataka","30":"Goa","31":"Lakshadweep","32":"Kerala","33":"Tamil Nadu","34":"Puducherry","35":"Andaman & Nicobar","36":"Telangana","37":"Andhra Pradesh","38":"Ladakh","97":"Other Territory","99":"Centre Jurisdiction"};
+const EN={P:"Individual",C:"Company",F:"Firm",H:"HUF",A:"AOP",B:"BOI",G:"Government",J:"Artificial Juridical Person",L:"Local Authority",T:"Trust"};
+const CH="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+function chk(g){let s=0;for(let i=0;i<14;i++){const p=CH.indexOf(g[i])*(i%2?2:1);s+=Math.floor(p/36)+p%36}return CH[(36-s%36)%36]}
+function check(raw){
+ const g=String(raw??"").trim().toUpperCase().replace(/\s/g,"");
+ const r={gstin:g,valid:false,reason:"",state:"",pan:"",entity:"",status:"Not checked"};
+ if(g.length!==15){r.reason="Not 15 characters";return r}
+ if(!/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(g)){r.reason="Wrong format";return r}
+ if(!ST[g.slice(0,2)]){r.reason="Unknown state code";return r}
+ if(chk(g)!==g[14]){r.reason="Checksum mismatch (likely typo)";return r}
+ r.valid=true;r.reason="OK";r.state=ST[g.slice(0,2)];r.pan=g.slice(2,12);r.entity=EN[g[5]]||"Other";return r}
+let rows=[];
+document.getElementById("f").addEventListener("change",async e=>{
+ const file=e.target.files[0];if(!file)return;
+ const wb=XLSX.read(await file.arrayBuffer(),{type:"array"});
+ const data=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:""});
+ const seen=new Set();rows=[];
+ data.forEach((r,i)=>{const v=String(r[0]??"").trim();if(!v)return;
+  if(i===0&&!/^\d{2}[A-Za-z]/.test(v))return;
+  const x=check(v);if(seen.has(x.gstin)){x.valid=false;x.reason="Duplicate";}seen.add(x.gstin);rows.push(x)});
+ render()});
+function render(){
+ const v=rows.filter(r=>r.valid).length;
+ const s=document.getElementById("sum");s.style.display="block";
+ s.innerHTML=`<b>${rows.length}</b> GSTINs read: <span class="ok"><b>${v}</b> valid</span>, <span class="bad"><b>${rows.length-v}</b> need attention</span>`;
+ const o=document.getElementById("out");o.style.display="block";
+ o.innerHTML="<table><tr><th>#</th><th>GSTIN</th><th>Check</th><th>State</th><th>PAN</th><th>Entity</th><th>Portal</th><th>Status</th></tr>"+
+ rows.map((r,i)=>`<tr><td>${i+1}</td><td>${r.gstin}</td><td class="${r.valid?"ok":"bad"}">${r.reason}</td><td>${r.state}</td><td>${r.pan}</td><td>${r.entity}</td>
+ <td>${r.valid?`<button class="s" onclick="cp(${i})">Copy &amp; open portal</button>`:""}</td>
+ <td>${r.valid?`<select onchange="rows[${i}].status=this.value">${["Not checked","Active","Cancelled","Suspended","Other"].map(x=>`<option${x===r.status?" selected":""}>${x}</option>`).join("")}</select>`:"–"}</td></tr>`).join("")+"</table>";
+ document.getElementById("dl").style.display="inline-block"}
+function cp(i){try{navigator.clipboard.writeText(rows[i].gstin)}catch(e){}
+ window.open("https://services.gst.gov.in/services/searchtp","_blank")}
+document.getElementById("dl").onclick=()=>{
+ const ws=XLSX.utils.json_to_sheet(rows.map(r=>({GSTIN:r.gstin,Valid:r.valid?"Yes":"No",Remark:r.reason,State:r.state,PAN:r.pan,Entity:r.entity,Status:r.valid?r.status:""})));
+ const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"GSTIN check");XLSX.writeFile(wb,"gstin-check.xlsx")};
+</script></body></html>
