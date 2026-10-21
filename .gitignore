@@ -1,0 +1,10 @@
+# NEVER commit credentials or downloaded data
+accounts.*
+gstins.*
+downloads/
+*.xlsx
+*.csv
+DEBUG_*
+FAILED_*
+.chromium_installed
+__pycache__/
